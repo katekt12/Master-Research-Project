@@ -1,0 +1,974 @@
+---
+title: "Fusions Upset Result"
+output: html_notebook
+---
+
+```{r}
+setwd("~/Desktop/Keziah/School/Research Project/Data/fusions/")
+
+# if (!require(ComplexUpset, quietly=T)) devtools::install_github("krassowski/complex-upset")
+
+library(reshape2)
+library(dplyr)
+library(ComplexUpset)
+library(ggplot2)
+library(ggVennDiagram)
+library(ggvenn)
+library(ggfortify)
+library(ggpubr)
+library(knitr)
+library(rmarkdown)
+library(gridExtra)
+```
+
+# Load data
+```{r}
+dmso1 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576402.fastq.gz/fusions.tsv", header=T)
+dmso2 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576403.fastq.gz/fusions.tsv", header=T)
+dmso3 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576404.fastq.gz/fusions.tsv", header=T)
+dim(dmso1)
+dim(dmso2)
+dim(dmso3)
+
+abema1 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576405.fastq.gz/fusions.tsv", header=T)
+abema2 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576406.fastq.gz/fusions.tsv", header=T)
+abema3 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576407.fastq.gz/fusions.tsv", header=T)
+dim(abema1)
+dim(abema2)
+dim(abema3)
+
+dmso_sh1 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576408.fastq.gz/fusions.tsv", header=T)
+dmso_sh2 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576409.fastq.gz/fusions.tsv", header=T)
+dim(dmso_sh1)
+dim(dmso_sh2)
+
+abema_sh1 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576410.fastq.gz/fusions.tsv", header=T)
+abema_sh2 <- read.delim("~/Desktop/Keziah/School/Research Project/Data/fusions/SRR12576411.fastq.gz/fusions.tsv", header=T)
+dim(abema_sh1)
+dim(abema_sh2)
+```
+
+## Manipulating each data (combined gene names - fusion genes)
+- dmso1
+```{r}
+for (i in 1:length(dmso1[,1])){
+  gene_combined = sort(c(dmso1[i, "X.gene1"], dmso1[i, "gene2"]))
+  dmso1[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(dmso1[i, "breakpoint1"], dmso1[i, "breakpoint2"]))
+  dmso1[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- dmso1 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+dmso1_mod <- dmso1[!dmso1$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(4,6),]
+
+# Merge back to the new dataframe
+dmso1_mod <- rbind(dmso1_mod, duplicates)
+
+# Check
+table(duplicated(dmso1_mod$gene_1n2))
+```
+
+- dmso2
+```{r}
+for (i in 1:length(dmso2[,1])){
+  gene_combined = sort(c(dmso2[i, "X.gene1"], dmso2[i, "gene2"]))
+  dmso2[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(dmso2[i, "breakpoint1"], dmso2[i, "breakpoint2"]))
+  dmso2[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- dmso2 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+dmso2_mod <- dmso2[!dmso2$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(5,7),]
+
+# Merge back to the new dataframe
+dmso2_mod <- rbind(dmso2_mod, duplicates)
+names(dmso2_mod) <- names(dmso1_mod)
+
+# Check
+table(duplicated(dmso2_mod$gene_1n2))
+```
+
+- dmso3
+```{r}
+for (i in 1:length(dmso3[,1])){
+  gene_combined = sort(c(dmso3[i, "X.gene1"], dmso3[i, "gene2"]))
+  dmso3[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(dmso3[i, "breakpoint1"], dmso3[i, "breakpoint2"]))
+  dmso3[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- dmso3 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+dmso3_mod <- dmso3[!dmso3$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(3,5,8),]
+
+# Merge back to the new dataframe
+dmso3_mod <- rbind(dmso3_mod, duplicates)
+names(dmso3_mod) <- names(dmso1_mod)
+
+# Check
+table(duplicated(dmso3_mod$gene_1n2))
+```
+
+- abema1
+```{r}
+for (i in 1:length(abema1[,1])){
+  gene_combined = sort(c(abema1[i, "X.gene1"], abema1[i, "gene2"]))
+  abema1[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(abema1[i, "breakpoint1"], abema1[i, "breakpoint2"]))
+  abema1[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- abema1 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+abema1_mod <- abema1[!abema1$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(2,5,7,9,11,16),]
+
+# Merge back to the new dataframe
+abema1_mod <- rbind(abema1_mod, duplicates)
+names(abema1_mod) <- names(dmso1_mod)
+
+# Check
+table(duplicated(abema1_mod$gene_1n2))
+```
+
+- abema2
+```{r}
+for (i in 1:length(abema2[,1])){
+  gene_combined = sort(c(abema2[i, "X.gene1"], abema2[i, "gene2"]))
+  abema2[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(abema2[i, "breakpoint1"], abema2[i, "breakpoint2"]))
+  abema2[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- abema2 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+abema2_mod <- abema2[!abema2$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(3,5,7),]
+
+# Merge back to the new dataframe
+abema2_mod <- rbind(abema2_mod, duplicates)
+names(abema2_mod) <- names(dmso1_mod)
+
+# Check
+table(duplicated(abema2_mod$gene_1n2))
+```
+
+- abema3
+```{r}
+for (i in 1:length(abema3[,1])){
+  gene_combined = sort(c(abema3[i, "X.gene1"], abema3[i, "gene2"]))
+  abema3[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(abema3[i, "breakpoint1"], abema3[i, "breakpoint2"]))
+  abema3[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- abema3 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+abema3_mod <- abema3[!abema3$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(4,8,10,12,14,16),]
+
+# Merge back to the new dataframe
+abema3_mod <- rbind(abema3_mod, duplicates)
+names(abema3_mod) <- names(dmso1_mod)
+
+# Check
+table(duplicated(abema3_mod$gene_1n2))
+```
+
+- dmso_sh1
+```{r}
+for (i in 1:length(dmso_sh1[,1])){
+  gene_combined = sort(c(dmso_sh1[i, "X.gene1"], dmso_sh1[i, "gene2"]))
+  dmso_sh1[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(dmso_sh1[i, "breakpoint1"], dmso_sh1[i, "breakpoint2"]))
+  dmso_sh1[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- dmso_sh1 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+dmso_sh1_mod <- dmso_sh1[!dmso_sh1$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(2,4),]
+
+# Merge back to the new dataframe
+dmso_sh1_mod <- rbind(dmso_sh1_mod, duplicates)
+names(dmso_sh1_mod) <- names(dmso1_mod)
+
+# Check
+table(duplicated(dmso_sh1_mod$gene_1n2))
+```
+
+- dmso_sh2
+```{r}
+for (i in 1:length(dmso_sh2[,1])){
+  gene_combined = sort(c(dmso_sh2[i, "X.gene1"], dmso_sh2[i, "gene2"]))
+  dmso_sh2[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(dmso_sh2[i, "breakpoint1"], dmso_sh2[i, "breakpoint2"]))
+  dmso_sh2[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- dmso_sh2 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+dmso_sh2_mod <- dmso_sh2[!dmso_sh2$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(2,4,6),]
+
+# Merge back to the new dataframe
+dmso_sh2_mod <- rbind(dmso_sh2_mod, duplicates)
+names(dmso_sh2_mod) <- names(dmso1_mod)
+
+# Check
+table(duplicated(dmso_sh2_mod$gene_1n2))
+```
+
+- abema_sh1
+```{r}
+for (i in 1:length(abema_sh1[,1])){
+  gene_combined = sort(c(abema_sh1[i, "X.gene1"], abema_sh1[i, "gene2"]))
+  abema_sh1[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(abema_sh1[i, "breakpoint1"], abema_sh1[i, "breakpoint2"]))
+  abema_sh1[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- abema_sh1 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+abema_sh1_mod <- abema_sh1[!abema_sh1$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(5,7),]
+
+# Merge back to the new dataframe
+abema_sh1_mod <- rbind(abema_sh1_mod, duplicates)
+names(abema_sh1_mod) <- names(dmso1_mod)
+
+# Check
+table(duplicated(abema_sh1_mod$gene_1n2))
+```
+
+- abema_sh2
+```{r}
+for (i in 1:length(abema_sh2[,1])){
+  gene_combined = sort(c(abema_sh2[i, "X.gene1"], abema_sh2[i, "gene2"]))
+  abema_sh2[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+  
+  chr_combined = sort(c(abema_sh2[i, "breakpoint1"], abema_sh2[i, "breakpoint2"]))
+  abema_sh2[i, "bp_1n2"] = paste(chr_combined, collapse="/")
+}
+# Capture the duplicates
+duplicates <- abema_sh2 %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+abema_sh2_mod <- abema_sh2[!abema_sh2$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE)
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(3,5),]
+
+# Merge back to the new dataframe
+abema_sh2_mod <- rbind(abema_sh2_mod, duplicates)
+names(abema_sh2_mod) <- names(dmso1_mod)
+
+# Check
+table(duplicated(abema_sh2_mod$gene_1n2))
+```
+
+# Edit data for easy identification when combining all together
+```{r}
+result_list <- list(dmso1_mod, dmso2_mod, dmso3_mod, abema1_mod, abema2_mod, abema3_mod,
+                 dmso_sh1_mod, dmso_sh2_mod, abema_sh1_mod, abema_sh2_mod)
+
+lib_list <- list("dmso1", "dmso2", "dmso3", 'abema1', 'abema2', 'abema3',
+                 'dmso_KD1', 'dmso_KD2', 'abema_KD1', "abema_KD2")
+
+treatment_grp <- list("dmso", "dmso", "dmso", 'abema', 'abema', 'abema',
+                 'dmso_KD', 'dmso_KD', 'abema_KD', "abema_KD")
+
+sample_id <- list("SRR12576402", "SRR12576403", "SRR12576404", "SRR12576405", "SRR12576406", "SRR12576407", "SRR12576408", "SRR12576409", "SRR12576410", "SRR12576411")
+
+
+# Add new col for library name
+# Add new col for treatment group
+# Add new col for sample ID
+# Add new col for combined split reads counts
+
+for (i in 1:length(result_list)){
+  
+  result_list[[i]]$sample <- lib_list[[i]]
+  result_list[[i]]$sample_grp <- treatment_grp[[i]]
+  result_list[[i]]$sample_id <- sample_id[[i]]
+  result_list[[i]]$split_reads <- result_list[[i]][["split_reads1"]] + result_list[[i]][["split_reads2"]]
+}
+names(result_list) <- lib_list
+```
+
+# Make fusion counts dataframe
+```{r}
+# Combining all data into 1 big df
+result_df <- do.call(rbind, result_list)
+
+# Subsetting gene_1n2, sample_id, and split_reads
+fus_counts <- result_df[,c(31,35:36)]
+rownames(fus_counts) <- NULL
+
+# Reshape row = fusion genes, col= sample_id
+fusion_counts <- reshape(fus_counts, idvar = "gene_1n2", timevar = "sample_id", direction = "wide")
+colnames(fusion_counts) <- c("gene_1n2", sample_id)
+
+# Making rownames = fusion genes, replace NA with 0
+rownames(fusion_counts) <- fusion_counts[,1]
+fusion_counts <- fusion_counts[,-1]
+fusion_counts[is.na(fusion_counts)] <- 0
+
+saveRDS(fusion_counts, file = "Fusion_Counts.RData")
+```
+
+# Data preparation for ComplexUpset
+```{r}
+## Make binary columns for each of the samples in lib_list and combine all of the lists ##
+for (i in lib_list){
+  result_list[[i]][,as.character(lib_list)] <- 0
+  result_list[[i]][,i] <- 1
+}
+
+binary_df <- do.call(rbind, result_list)
+
+## Taking the binary columns only ##
+result_binary_num <- binary_df %>%
+  dplyr::group_by(gene_1n2) %>%
+  dplyr::summarise_at(as.character(lib_list), sum)
+
+## Making the binary columns into TRUE and FALSE ##
+result_binary <- as.data.frame(result_binary_num)
+rownames(result_binary) <- result_binary_num$gene_1n2
+result_binary <- result_binary[,-1]
+result_binary <- result_binary == 1
+```
+
+# Upset Data
+```{r}
+upset_results <- upset_data(
+  data = as.data.frame(result_binary_num),
+  intersect = as.character(lib_list),
+  min_size = 0,
+  keep_empty_groups = FALSE,
+  group_by = 'degree',
+  )
+```
+
+# Upset plot
+```{r}
+ComplexUpset::upset(
+  as.data.frame(result_binary),
+  as.character(lib_list),
+  name = 'sample',
+  width_ratio = 0.3,
+  height_ratio = 0.5,
+)
+```
+
+# Getting intersections from different group
+```{r}
+## Intersection Combinations ##
+upset_results$sorted$intersections
+
+## Exclusive_intersection - intersection of some sets exclusively ##
+View(upset_results$sizes$exclusive_intersection)
+
+## Inclusive_intersection - intersection of some sets inclusively ##
+upset_results$sizes$inclusive_intersection
+
+## Exclusive_union - union of some sets exclusively ##
+upset_results$sizes$exclusive_union
+
+## Inclusive_union - union of some sets inclusively ##
+upset_results$sizes$inclusive_union
+
+
+## Fusions in exclusive_intersection ##
+# All samples #
+fus_all_intersect <- upset_results$with_sizes %>% filter(intersection == 'dmso1-dmso2-dmso3-abema1-abema2-abema3-dmso_KD1-dmso_KD2-abema_KD1-abema_KD2', in_exclusive_intersection == 1)
+rownames(fus_all_intersect) <- NULL
+
+# dmso1-dmso2 #
+# exclusive_intersection
+upset_results$with_sizes %>% filter(intersection == 'dmso1-dmso2', in_exclusive_intersection == 1)
+
+# dmso1 #
+upset_results$with_sizes %>% filter(intersection == 'dmso1', in_exclusive_intersection == 1)
+
+
+## See a fusion combinations ##
+filter(upset_results$with_sizes, grepl("AK7/PAPOLA", rownames(upset_results$with_sizes), fixed = TRUE))
+
+# upset_results$with_sizes$intersection shows for a particular fusion, where has it existed
+# upset_results$with_sizes$exclusive_intersection will show the same intersection for one particular fusion altho it has many combinations
+```
+
+# Library Size
+- FEATURE COUNTS
+```{r}
+fc <- readRDS("/Users/tiknokeziah/Desktop/Keziah/School/Research Project/Data/Count Data/Feature_Counts.RData")
+
+# Set data for ggplot
+counts_data <- data.frame(colSums(fc$counts))
+colnames(counts_data) <- "lib_size"
+counts_data$sample <- unlist(lib_list)
+counts_data$group <- unlist(treatment_grp)
+
+counts_data$sample <- factor(counts_data$sample, levels = unlist(lib_list))
+counts_data$group <- factor(counts_data$group, levels = c('dmso','abema','dmso_KD','abema_KD'))
+group.colors <- c("lightpink3","skyblue4","thistle3", "steelblue")
+
+ggplot(counts_data, aes(x = sample, y=lib_size/10^6, fill=group)) +
+  geom_col(width = 0.5) +
+  ggtitle("All Counts Library Size") + 
+  xlab("Samples") +
+  ylab("Library size (millions)") +
+  guides(fill=guide_legend(title ='Treatment')) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust=0.5), axis.text.x = element_text(angle = 45,hjust=1)) +
+  scale_fill_manual(values= group.colors)
+```
+
+- FUSION COUNTS
+```{r}
+# Set data for ggplot
+fusion <- upset_results$sizes$inclusive_intersection[as.character(lib_list)]
+total_fusion <- data.frame(sample = as.character(lib_list), fusion_size = fusion)
+total_fusion$group <- unlist(treatment_grp)
+
+total_fusion$sample <- factor(total_fusion$sample, levels = unlist(lib_list))
+total_fusion$group <- factor(total_fusion$group, levels = c('dmso','abema','dmso_KD','abema_KD'))
+group.colors <- c("lightpink3","skyblue4","thistle3", "steelblue")
+
+ggplot(total_fusion, aes(x = sample, y = fusion_size, fill=group)) +
+  geom_col(width = 0.5) +
+  labs(x = 'Samples', y = 'Library size', title = 'Fusions Library Size') +
+  guides(fill=guide_legend(title ='Treatment')) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust=0.5), axis.text.x = element_text(angle = 45,hjust=1)) +
+  scale_fill_manual(values= group.colors)
+```
+
+# Distribution plots
+- FEATURE COUNTS
+```{r}
+# Get log2 counts per million
+logcounts_fc <- cpm(fc$counts, log=TRUE)
+colnames(logcounts_fc) <- unlist(lib_list)
+
+# Set data for ggplot
+boxplot_fc <- melt(as.matrix(logcounts_fc))
+colnames(boxplot_fc) <- c("genes", "sample", "logcounts")
+
+ggplot(boxplot_fc, aes(x=sample, y= logcounts)) +
+  geom_boxplot() +
+  geom_abline(intercept = median(logcounts_fc), slope = 0, color="red") +
+  labs(x='Samples', y= "log(Counts per Million)", title = 'All Counts Distribution using Boxplot') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust=0.5), axis.text.x = element_text(angle = 45,hjust=1))
+```
+
+- FUSION COUNTS BOXPLOT
+```{r}
+# Get log2 counts per million
+logcounts_fusion <- cpm(fusion_counts, log=T)
+colnames(logcounts_fusion) <- unlist(lib_list)
+
+# Set data for ggplot
+boxplot_fusion <- melt(as.matrix(logcounts_fusion))
+colnames(boxplot_fusion) <- c("fusions", "sample", "logcounts")
+
+ggplot(boxplot_fusion, aes(x=sample, y= logcounts)) +
+  geom_boxplot() +
+  geom_abline(intercept = median(logcounts_fusion), slope = 0, color="red") +
+  labs(x='Samples', y= "log(Counts per Million)", title = 'Fusion Counts Distribution using Boxplot') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust=0.5), axis.text.x = element_text(angle = 45,hjust=1)) +
+  coord_cartesian(ylim = c(12,17.5))
+```
+
+# MDS Plot
+```{r}
+## FEATURE COUNTS ##
+plotMDS(fc$counts, col=c(1,1,1,2,2,2,3,3,4,4), dim.plot = c(3,4))
+fc_pca <- prcomp(fc$counts)
+
+fc_pca_plot <- autoplot(fc_pca, 
+                          data = fc$counts, 
+                          colour = 'Species') 
+
+
+## FUSION COUNTS ##
+plotMDS(fusion_counts, col=c(1,1,1,2,2,2,3,3,4,4), dim.plot = c(3,4))
+```
+
+```{r}
+d <- dist(fc$counts)
+```
+
+- dmso
+```{r}
+dmso <- result_df %>% filter(sample_grp=='dmso')
+
+# Capture the duplicates
+duplicates <- dmso %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+dmso_mod <- dmso[!dmso$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE) %>% arrange(gene_1n2)
+
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(2,6,8,11,20,24,26,29,32,35,42,44,47,53,55,57,59,63,66,68,72,75,78,85),]
+
+# Merge back to the new dataframe
+dmso_mod <- rbind(dmso_mod, duplicates)
+
+# Check
+table(duplicated(dmso_mod$gene_1n2))
+
+# Sum the split_reads
+dmso_mod$split_reads <- dmso_mod$split_reads1 + dmso_mod$split_reads2
+```
+
+- abema
+```{r}
+abema <- result_df %>% filter(sample_grp=='abema')
+
+# Capture the duplicates
+duplicates <- abema %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+abema_mod <- abema[!abema$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE) %>% arrange(gene_1n2)
+
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(3,7,9,11,14,16,19,21,29,31,33,35,39,41,43,46,53,55,57,60,68,72,77,79,81,83,86,88,91,93),]
+
+# Merge back to the new dataframe
+abema_mod <- rbind(abema_mod, duplicates)
+
+# Check
+table(duplicated(abema_mod$gene_1n2))
+
+# Sum the split_reads
+abema_mod$split_reads <- abema_mod$split_reads1 + abema_mod$split_reads2
+```
+
+- dmso_ko
+```{r}
+dmso_ko <- result_df %>% filter(sample_grp=='dmso_KD')
+
+# Capture the duplicates
+duplicates <- dmso_ko %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+dmso_ko_mod <- dmso_ko[!dmso_ko$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE) %>% arrange(gene_1n2)
+
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(2,4,6,9,12,15,22,24,27,29,31,35,37,39,43,45,47,50,52),]
+
+# Merge back to the new dataframe
+dmso_ko_mod <- rbind(dmso_ko_mod, duplicates)
+
+# Check
+table(duplicated(dmso_ko_mod$gene_1n2))
+
+# Sum the split_reads
+dmso_ko_mod$split_reads <- dmso_ko_mod$split_reads1 + dmso_ko_mod$split_reads2
+```
+
+- abema_ko
+```{r}
+abema_ko <- result_df %>% filter(sample_grp=='abema_KD')
+
+# Capture the duplicates
+duplicates <- abema_ko %>% group_by(gene_1n2) %>% filter(n() > 1)
+
+# Removing duplicates from main data frame and save it in new data frame
+abema_ko_mod <- abema_ko[!abema_ko$gene_1n2 %in% duplicates$gene_1n2,]
+
+# For similar X.gene1 and gene2, sum split_reads1 and split_reads2 while keeping all the columns according to the first replicate
+duplicates <- duplicates %>% group_by(X.gene1,gene2) %>% mutate(split_reads1= sum(split_reads1), split_reads2 = sum(split_reads2)) %>% distinct(X.gene1, split_reads1, split_reads2, .keep_all = TRUE) %>% arrange(gene_1n2)
+
+
+# For duplicates with swapped gene names in X.gene1 and gene2, do for loop
+for (dup in 2:nrow(duplicates)){
+  if(duplicates[dup-1, "gene_1n2"] == duplicates[dup, "gene_1n2"]){
+    duplicates[dup-1, "split_reads1"] = duplicates[dup-1, "split_reads1"] + duplicates[dup, "split_reads2"]
+    duplicates[dup-1, "split_reads2"] = duplicates[dup-1, "split_reads2"] + duplicates[dup, "split_reads1"]
+  }
+}
+
+# Remove manually those swapped replicates
+duplicates <- duplicates[-c(2,8,12,16,30,32,38),]
+
+# Merge back to the new dataframe
+abema_ko_mod <- rbind(abema_ko_mod, duplicates)
+
+# Check
+table(duplicated(abema_ko_mod$gene_1n2))
+
+# Sum the split_reads
+abema_ko_mod$split_reads <- abema_ko_mod$split_reads1 + abema_ko_mod$split_reads2
+```
+
+# For Venn Diagram between dmso and abema
+```{r}
+d_a <- list(dmso_mod, abema_mod)
+d_a_list <- list('dmso','abema')
+names(d_a) <- d_a_list
+
+for (i in d_a_list){
+  d_a[[i]][,as.character(d_a_list)] <- 0
+  d_a[[i]][,i] <- 1
+}
+
+d_a <- do.call(rbind, d_a)
+
+## Taking the binary columns only ##
+binary_d_a <-d_a %>%
+  dplyr::group_by(gene_1n2) %>%
+  dplyr::summarise_at(as.character(d_a_list), sum)
+
+## Making the binary columns into TRUE and FALSE ##
+d_a_binary <- as.data.frame(binary_d_a)
+rownames(d_a_binary) <- d_a_binary$gene_1n2
+d_a_binary <- d_a_binary[,-1]
+d_a_binary <- d_a_binary == 1
+```
+
+# For Venn Diagram between dmso_ko and abema_ko
+```{r}
+d_a_ko <- list(dmso_ko_mod, abema_ko_mod)
+d_a_ko_list <- list('dmso_KD','abema_KD')
+names(d_a_ko) <- d_a_ko_list
+
+for (i in d_a_ko_list){
+  d_a_ko[[i]][,as.character(d_a_ko_list)] <- 0
+  d_a_ko[[i]][,i] <- 1
+}
+
+d_a_ko <- do.call(rbind, d_a_ko)
+
+## Taking the binary columns only ##
+binary_d_a_ko <- d_a_ko %>%
+  dplyr::group_by(gene_1n2) %>%
+  dplyr::summarise_at(as.character(d_a_ko_list), sum)
+
+## Making the binary columns into TRUE and FALSE ##
+d_a_ko_binary <- as.data.frame(binary_d_a_ko)
+rownames(d_a_ko_binary) <- d_a_ko_binary$gene_1n2
+d_a_ko_binary <- d_a_ko_binary[,-1]
+d_a_ko_binary <- d_a_ko_binary == 1
+```
+
+# Venn diagram
+```{r}
+x <- list(
+  dmso_1 = dmso1_mod$gene_1n2,
+  dmso_2 = dmso2_mod$gene_1n2,
+  dmso_3 = dmso3_mod$gene_1n2,
+  abema_1 = abema1_mod$gene_1n2,
+  abema_2 = abema2_mod$gene_1n2,
+  abema_3 = abema3_mod$gene_1n2,
+  dmso_ko_1 = dmso_sh1_mod$gene_1n2,
+  dmso_ko_2 = dmso_sh2_mod$gene_1n2,
+  abema_ko_1 = abema_sh1_mod$gene_1n2,
+  abema_ko_2 = abema_sh2_mod$gene_1n2
+)
+ggVennDiagram(x[1:3],
+              label_alpha = 0,
+              label = 'count',
+              category.names = c('dmso 1', 'dmso 2', 'dmso 3')) +
+  ggplot2::scale_fill_gradient(low = 'moccasin', high = 'orangered3') +
+  coord_fixed(expand = F, xlim=c(-10,10), ylim=c(-10,5)) +
+  theme_void()
+
+ggVennDiagram(x[4:6],
+              label_alpha = 0,
+              label = 'count',
+              category.names = c('abema 1', 'abema 2', 'abema 3')) +
+  ggplot2::scale_fill_gradient(low = 'moccasin', high = 'navajowhite4') +
+  coord_fixed(expand = F, xlim=c(-10,10), ylim=c(-10,5)) +
+  theme_void()
+
+ggVennDiagram(x[7:10],
+              label_alpha = 0,
+              label = 'count',
+              category.names = c('dmso_KD 1', 'dmso_KD 2', 'abema_KD 1','abema_KD 2')) +
+  ggplot2::scale_fill_gradient(low = 'lightyellow1', high = 'tan3') +
+  coord_fixed(expand = F, xlim=c(-0.2,1.2), ylim=c(-0,0.9)) +
+  theme_void()
+
+
+y <- as_tibble(result_binary)
+
+ggplot(y[,7:8]) +
+  geom_venn(aes(A=`dmso_KD1`, B=`dmso_KD2`),
+            show_percentage = F,
+            fill_color = c('slategray1', 'slategrey'),
+            set_names = c('dmso_KD 1', 'dmso_KD 2'),
+            set_name_size = 4) +
+  coord_fixed() +
+  theme_void()
+
+ggplot(y[,9:10]) +
+  geom_venn(aes(A=`abema_KD1`, B=`abema_KD2`),
+            show_percentage = F,
+            fill_color = c('ivory2', 'ivory4'),
+            set_names = c('abema_KD 1', 'abema_KD 2'),
+            set_name_size = 4) +
+  coord_fixed() +
+  theme_void()
+
+
+z <- as_tibble(d_a_binary)
+
+ggplot(z) +
+  geom_venn(aes(A=`dmso`, B=`abema`),
+            show_percentage = F,
+            fill_color = c('cornsilk', 'palevioletred3'),
+            set_names = c('dmso', 'abema'),
+            set_name_size = 4) +
+  coord_fixed() +
+  theme_void()
+
+z2 <- as_tibble(d_a_ko_binary)
+
+ggplot(z2) +
+  geom_venn(aes(A=`dmso_KD`, B=`abema_KD`),
+            show_percentage = F,
+            fill_color = c('azure', 'lightcoral'),
+            set_names = c('dmso_KD', 'abema_KD'),
+            set_name_size = 4) +
+  coord_fixed() +
+  theme_void()
+```
+
+# MCF-7 known fusions
+```{r}
+mcf7 <- readxl::read_xlsx(path = '~/Desktop/Keziah/School/Research Project/Data/mcf7_data.xlsx', range = "A3:C102")
+mcf7 <- mcf7 %>% filter(Sample == 'MCF-7') %>% as.data.frame()
+
+for (i in 1:length(mcf7[,1])){
+  gene_combined = sort(c(mcf7[i, "Gene1"], mcf7[i, "Gene2"]))
+  mcf7[i, "gene_1n2"] = paste(gene_combined, collapse="/")
+}
+
+mcf7 <- mcf7 %>%  relocate(Sample, .after = gene_1n2)
+mcf7 <- mcf7[,-c(1,2)]
+
+table <- kable(mcf7, format="markdown", row.names = nrow(mcf7))
+cat(table, sep="\n", file="mcf7.Rmd")
+render("mcf7.Rmd",output_format = "pdf_document")
+```
+
+# Storing table in pdf format
+```{r}
+pdf(file = "20_common_fus.pdf", height = nrow(fus_all_intersect)/3,
+    width = ncol(fus_all_intersect[1:11])*1.4)
+gridExtra::grid.table(fus_all_intersect[,1:11])
+dev.off()
+
+pdf(file = "fusion_counts.pdf", height = nrow(fusion_counts)/20,
+    width = ncol(fusion_counts[1:10])*2.2)
+gridExtra::grid.table(fusion_counts[1:25,1:10])
+dev.off()
+
+pdf(file = "feature_counts.pdf", height = nrow(clean_counts[1:169,])/20,
+    width = ncol(clean_counts[1:10])*1.5)
+gridExtra::grid.table(clean_counts[1:25,1:10])
+dev.off()
+
+pdf(file = "df.res.pdf", height = nrow(df.res[1:169,])/20,
+    width = ncol(df.res)*1.7)
+gridExtra::grid.table(df.res[25539:25559,])
+dev.off()
+```
+
+# Comparing our findings with MCF-7 known fusions
+```{r}
+table(fus_all_intersect$gene_1n2 %in% mcf7$gene_1n2)
+
+```
