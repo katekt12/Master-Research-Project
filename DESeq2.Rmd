@@ -1,0 +1,328 @@
+---
+title: "DESeq2"
+output: pdf_document
+date: "2024-01-25"
+---
+
+```{r}
+setwd("/Users/tiknokeziah/Desktop/Keziah/School/Research Project/Data/Count Data")
+
+library(tidyr)
+library(dplyr)
+library(limma)
+library(edgeR)
+library(DESeq2)
+library(reshape2)
+library(ggplot2)
+library(rstatix)
+library(ggpubr)
+```
+
+# Upload RData
+```{r}
+gene_list <- readRDS("gene_list.RData")
+all_counts <- readRDS("All_Counts.RData")
+
+metadata <- readRDS('metadata.RData')
+metadata$sample_name <- rownames(metadata)
+
+# Normalized counts
+dds <- readRDS("dds.normal_vs_ko.RData")
+norm_counts <- data.frame(counts(dds, normalized=TRUE))
+```
+
+# Data manipulation for ggplot DMSO vs DMSO_RB1-KD
+```{r}
+df.res <- readRDS("df.res.RData")
+df.res.fus <- readRDS("df.res.fus.RData")
+df.res.fus$hgnc_symbol <- rownames(df.res.fus)
+
+# Subsetting normalized counts that have an ordered significant pvalues
+norm_counts.sig <- norm_counts[na.omit(head(df.res[order(df.res$padj),], 4))$entrezgene_id,]
+
+norm_counts.sig.fus <- norm_counts[na.omit(head(df.res.fus[order(df.res.fus$padj),], 4))$hgnc_symbol,]
+
+# Manipulating the data
+melt_norm <- melt(as.matrix(norm_counts.sig))
+colnames(melt_norm) <- c("entrezgene_id", "sample_name", "norm_counts")
+
+melt_norm_fus <- melt(as.matrix(norm_counts.sig.fus))
+colnames(melt_norm_fus) <- c("hgnc_symbol", "sample_name", "norm_counts")
+
+# Merging the metadata and gene list to the melt_norm to add new_treatment and symbol columns
+melt_norm <- merge(melt_norm, metadata, by="sample_name",all.x=T)
+melt_norm <- merge(melt_norm, gene_list, by="entrezgene_id", all.x=T)
+melt_norm$norm_counts <- log2(melt_norm$norm_counts)
+melt_norm$new_treatment <- factor(melt_norm$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+melt_norm_fus <- merge(melt_norm_fus, metadata, by="sample_name",all.x=T)
+melt_norm_fus$norm_counts <- log2(melt_norm_fus$norm_counts)
+melt_norm_fus$new_treatment <- factor(melt_norm_fus$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+# Go to ggplot
+```
+
+# Data manipulation for ggplot DMSO vs Abema
+```{r}
+df.res <- readRDS("df.res.abema.RData")
+df.res.fus <- readRDS("df.res.fus_abema.RData")
+df.res.fus$hgnc_symbol <- rownames(df.res.fus)
+
+# Subsetting normalized counts that have an ordered significant pvalues
+norm_counts.sig <- norm_counts[na.omit(head(df.res[order(df.res$padj),], 4))$entrezgene_id,]
+
+norm_counts.sig.fus <- norm_counts[na.omit(head(df.res.fus[order(df.res.fus$padj),], 4))$hgnc_symbol,]
+
+# Manipulating the data
+melt_norm <- melt(as.matrix(norm_counts.sig))
+colnames(melt_norm) <- c("entrezgene_id", "sample_name", "norm_counts")
+
+melt_norm_fus <- melt(as.matrix(norm_counts.sig.fus))
+colnames(melt_norm_fus) <- c("hgnc_symbol", "sample_name", "norm_counts")
+
+# Merging the metadata and gene list to the melt_norm to add new_treatment and symbol columns
+melt_norm <- merge(melt_norm, metadata, by="sample_name",all.x=T)
+melt_norm <- merge(melt_norm, gene_list, by="entrezgene_id", all.x=T)
+melt_norm$norm_counts <- log2(melt_norm$norm_counts)
+melt_norm$new_treatment <- factor(melt_norm$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+melt_norm_fus <- merge(melt_norm_fus, metadata, by="sample_name",all.x=T)
+melt_norm_fus$norm_counts <- log2(melt_norm_fus$norm_counts)
+melt_norm_fus$new_treatment <- factor(melt_norm_fus$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+# Go to ggplot
+```
+
+# Data manipulation for ggplot DMSO vs Abema_RB1-KD
+```{r}
+df.res <- readRDS("df.res.abema.ko.RData")
+df.res.fus <- readRDS("df.res.fus_abema.ko.RData")
+df.res.fus$hgnc_symbol <- rownames(df.res.fus)
+
+# Subsetting normalized counts that have an ordered significant pvalues
+norm_counts.sig <- norm_counts[na.omit(head(df.res[order(df.res$padj),], 4))$entrezgene_id,]
+
+norm_counts.sig.fus <- norm_counts[na.omit(head(df.res.fus[order(df.res.fus$padj),], 4))$hgnc_symbol,]
+
+# Manipulating the data
+melt_norm <- melt(as.matrix(norm_counts.sig))
+colnames(melt_norm) <- c("entrezgene_id", "sample_name", "norm_counts")
+
+melt_norm_fus <- melt(as.matrix(norm_counts.sig.fus))
+colnames(melt_norm_fus) <- c("hgnc_symbol", "sample_name", "norm_counts")
+
+# Merging the metadata and gene list to the melt_norm to add new_treatment and symbol columns
+melt_norm <- merge(melt_norm, metadata, by="sample_name",all.x=T)
+melt_norm <- merge(melt_norm, gene_list, by="entrezgene_id", all.x=T)
+melt_norm$norm_counts <- log2(melt_norm$norm_counts)
+melt_norm$new_treatment <- factor(melt_norm$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+melt_norm_fus <- merge(melt_norm_fus, metadata, by="sample_name",all.x=T)
+melt_norm_fus$norm_counts <- log2(melt_norm_fus$norm_counts)
+melt_norm_fus$new_treatment <- factor(melt_norm_fus$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+# Go to ggplot
+```
+
+# Data manipulation for ggplot Abema vs DMSO_RB1-KD
+```{r}
+df.res <- readRDS("df.res.abema_dmso.ko.RData")
+df.res.fus <- readRDS("df.res.fus_abema_dmso.ko.RData")
+df.res.fus$hgnc_symbol <- rownames(df.res.fus)
+
+# Subsetting normalized counts that have an ordered significant pvalues
+norm_counts.sig <- norm_counts[na.omit(head(df.res[order(df.res$padj),], 4))$entrezgene_id,]
+
+norm_counts.sig.fus <- norm_counts[na.omit(head(df.res.fus[order(df.res.fus$padj),], 4))$hgnc_symbol,]
+
+# Manipulating the data
+melt_norm <- melt(as.matrix(norm_counts.sig))
+colnames(melt_norm) <- c("entrezgene_id", "sample_name", "norm_counts")
+
+melt_norm_fus <- melt(as.matrix(norm_counts.sig.fus))
+colnames(melt_norm_fus) <- c("hgnc_symbol", "sample_name", "norm_counts")
+
+# Merging the metadata and gene list to the melt_norm to add new_treatment and symbol columns
+melt_norm <- merge(melt_norm, metadata, by="sample_name",all.x=T)
+melt_norm <- merge(melt_norm, gene_list, by="entrezgene_id", all.x=T)
+melt_norm$norm_counts <- log2(melt_norm$norm_counts)
+melt_norm$new_treatment <- factor(melt_norm$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+melt_norm_fus <- merge(melt_norm_fus, metadata, by="sample_name",all.x=T)
+melt_norm_fus$norm_counts <- log2(melt_norm_fus$norm_counts)
+melt_norm_fus$new_treatment <- factor(melt_norm_fus$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+# Go to ggplot
+```
+
+# Data manipulation for ggplot Abema vs Abema_RB1-KD
+```{r}
+df.res <- readRDS("df.res.abema_abema.ko.RData")
+df.res.fus <- readRDS("df.res.fus_abema_abema.ko.RData")
+df.res.fus$hgnc_symbol <- rownames(df.res.fus)
+
+# Subsetting normalized counts that have an ordered significant pvalues
+norm_counts.sig <- norm_counts[na.omit(head(df.res[order(df.res$padj),], 4))$entrezgene_id,]
+
+norm_counts.sig.fus <- norm_counts[na.omit(head(df.res.fus[order(df.res.fus$padj),], 4))$hgnc_symbol,]
+
+# Manipulating the data
+melt_norm <- melt(as.matrix(norm_counts.sig))
+colnames(melt_norm) <- c("entrezgene_id", "sample_name", "norm_counts")
+
+melt_norm_fus <- melt(as.matrix(norm_counts.sig.fus))
+colnames(melt_norm_fus) <- c("hgnc_symbol", "sample_name", "norm_counts")
+
+# Merging the metadata and gene list to the melt_norm to add new_treatment and symbol columns
+melt_norm <- merge(melt_norm, metadata, by="sample_name",all.x=T)
+melt_norm <- merge(melt_norm, gene_list, by="entrezgene_id", all.x=T)
+melt_norm$norm_counts <- log2(melt_norm$norm_counts)
+melt_norm$new_treatment <- factor(melt_norm$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+melt_norm_fus <- merge(melt_norm_fus, metadata, by="sample_name",all.x=T)
+melt_norm_fus$norm_counts <- log2(melt_norm_fus$norm_counts)
+melt_norm_fus$new_treatment <- factor(melt_norm_fus$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+# Go to ggplot
+```
+
+# Data manipulation for ggplot DMSO_RB1-KD vs Abema_RB1-KD
+```{r}
+df.res <- readRDS("df.res.dmso.ko_abema.ko.RData")
+df.res.fus <- readRDS("df.res.fus_dmso.ko_abema.ko.RData")
+df.res.fus$hgnc_symbol <- rownames(df.res.fus)
+
+# Subsetting normalized counts that have an ordered significant pvalues
+norm_counts.sig <- norm_counts[na.omit(head(df.res[order(df.res$padj),], 4))$entrezgene_id,]
+
+norm_counts.sig.fus <- norm_counts[na.omit(head(df.res.fus[order(df.res.fus$padj),], 4))$hgnc_symbol,]
+
+# Manipulating the data
+melt_norm <- melt(as.matrix(norm_counts.sig))
+colnames(melt_norm) <- c("entrezgene_id", "sample_name", "norm_counts")
+
+melt_norm_fus <- melt(as.matrix(norm_counts.sig.fus))
+colnames(melt_norm_fus) <- c("hgnc_symbol", "sample_name", "norm_counts")
+
+# Merging the metadata and gene list to the melt_norm to add new_treatment and symbol columns
+melt_norm <- merge(melt_norm, metadata, by="sample_name",all.x=T)
+melt_norm <- merge(melt_norm, gene_list, by="entrezgene_id", all.x=T)
+melt_norm$norm_counts <- log2(melt_norm$norm_counts)
+melt_norm$new_treatment <- factor(melt_norm$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+melt_norm_fus <- merge(melt_norm_fus, metadata, by="sample_name",all.x=T)
+melt_norm_fus$norm_counts <- log2(melt_norm_fus$norm_counts)
+melt_norm_fus$new_treatment <- factor(melt_norm_fus$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+# Go to ggplot
+```
+
+# Data manipulation for ggplot DMSO vs Abema
+```{r}
+df.res <- readRDS("df.res.dmso_vs_abema.RData")
+df.res.fus <- readRDS("df.res.fus.dmso_vs_abema.RData")
+df.res.fus$hgnc_symbol <- rownames(df.res.fus)
+
+# Subsetting normalized counts that have an ordered significant pvalues
+norm_counts.sig <- norm_counts[na.omit(head(df.res[order(df.res$padj),], 4))$entrezgene_id,]
+
+norm_counts.sig.fus <- norm_counts[na.omit(head(df.res.fus[order(df.res.fus$padj),], 4))$hgnc_symbol,]
+
+# Manipulating the data
+melt_norm <- melt(as.matrix(norm_counts.sig))
+colnames(melt_norm) <- c("entrezgene_id", "sample_name", "norm_counts")
+
+melt_norm_fus <- melt(as.matrix(norm_counts.sig.fus))
+colnames(melt_norm_fus) <- c("hgnc_symbol", "sample_name", "norm_counts")
+
+# Merging the metadata and gene list to the melt_norm to add new_treatment and symbol columns
+melt_norm <- merge(melt_norm, metadata, by="sample_name",all.x=T)
+melt_norm <- merge(melt_norm, gene_list, by="entrezgene_id", all.x=T)
+melt_norm$norm_counts <- log2(melt_norm$norm_counts)
+melt_norm$treatment <- factor(melt_norm$treatment, levels = c('DMSO','abemaciclib'))
+melt_norm$new_treatment <- factor(melt_norm$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+melt_norm_fus <- merge(melt_norm_fus, metadata, by="sample_name",all.x=T)
+melt_norm_fus$norm_counts <- log2(melt_norm_fus$norm_counts)
+melt_norm_fus$treatment <- factor(melt_norm_fus$treatment, levels = c('DMSO','abemaciclib'))
+melt_norm_fus$new_treatment <- factor(melt_norm_fus$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+# Go to ggplot
+```
+
+# Data manipulation for ggplot Normal vs KD
+```{r}
+df.res <- readRDS("df.res.normal_vs_ko.RData")
+df.res.fus <- readRDS("df.res.fus.normal_vs_ko.RData")
+df.res.fus$hgnc_symbol <- rownames(df.res.fus)
+
+# Subsetting normalized counts that have an ordered significant pvalues
+norm_counts.sig <- norm_counts[na.omit(head(df.res[order(df.res$padj),], 4))$entrezgene_id,]
+
+norm_counts.sig.fus <- norm_counts[na.omit(head(df.res.fus[order(df.res.fus$padj),], 4))$hgnc_symbol,]
+
+# Manipulating the data
+melt_norm <- melt(as.matrix(norm_counts.sig))
+colnames(melt_norm) <- c("entrezgene_id", "sample_name", "norm_counts")
+
+melt_norm_fus <- melt(as.matrix(norm_counts.sig.fus))
+colnames(melt_norm_fus) <- c("hgnc_symbol", "sample_name", "norm_counts")
+
+# Merging the metadata and gene list to the melt_norm to add new_treatment and symbol columns
+melt_norm <- merge(melt_norm, metadata, by="sample_name",all.x=T)
+melt_norm <- merge(melt_norm, gene_list, by="entrezgene_id", all.x=T)
+melt_norm$norm_counts <- log2(melt_norm$norm_counts)
+melt_norm$group <- factor(melt_norm$group, levels = c('Normal','KD'))
+melt_norm$new_treatment <- factor(melt_norm$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+melt_norm_fus <- merge(melt_norm_fus, metadata, by="sample_name",all.x=T)
+melt_norm_fus$norm_counts <- log2(melt_norm_fus$norm_counts)
+melt_norm_fus$group <- factor(melt_norm_fus$group, levels = c('Normal','KD'))
+melt_norm_fus$new_treatment <- factor(melt_norm_fus$new_treatment, levels = c('DMSO','abemaciclib','DMSO_RB1-KD','abemaciclib_RB1-KD'))
+
+# Go to ggplot
+```
+
+# ggplot for all
+```{r}
+# Just change the parameter accordingly
+
+ggplot(melt_norm, aes(x = new_treatment, y=norm_counts)) +
+  geom_boxplot(aes(color=new_treatment)) +
+  facet_wrap(~hgnc_symbol, scales = "free_y") +
+  labs(title = "DESeq2 All+Fusion DMSO_RB1-KD vs Abemaciclib_RB1-KD", x="Treatment", y="Log2Normalized_Counts") +
+  theme_bw() + # reset the setting theme, so needs to be in the first theme
+  guides(col = guide_legend(title='Treatment')) +
+  theme(plot.title = element_text(hjust=0.5), axis.text.x = element_text(angle = 45,hjust=1))
+```
+
+# ggplot for fusion
+```{r}
+# Adjust parameter accordingly
+
+ggplot(melt_norm_fus, aes(x = new_treatment, y=norm_counts)) +
+  geom_boxplot(aes(color=new_treatment)) +
+  facet_wrap(~hgnc_symbol, scales = "free_y") +
+  ggtitle("DESeq2 Fusion DMSO_RB1-KD vs Abemaciclib_RB1-KD") +
+  theme_bw() + # reset the setting theme, so needs to be in the first theme
+  guides(col = guide_legend(title='Treatment')) +
+  theme(plot.title = element_text(hjust=0.5), axis.text.x = element_text(angle = 45,hjust=1)) +
+  xlab("Treatment") +
+  ylab("Log2Normalized_Counts")
+```
+
+# Volcano plot
+```{r}
+library(ggrepel)
+ggplot(df.res, aes(x = log2FoldChange, y=-log10(pvalue), color = sig)) +
+  geom_point() +
+  xlim(-3.5,3.5) +
+  ylim(0,40) +
+  geom_text_repel(aes(label=hgnc.sig), size=2) +
+  scale_color_manual(values=c('red','blue'), na.value = 'grey') +
+  ggtitle("Volcano Plot DMSO vs DMSO_RB1-KO") +
+  theme_bw() + # reset the setting theme, so needs to be in the first theme
+  theme(plot.title = element_text(hjust=0.5)) +
+  xlab("Log Fold Change") +
+  ylab("-log10 p-Value")
+```

@@ -1,0 +1,249 @@
+---
+title: "Counts for RNA-Seq"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/home/ktikno/res_project/bam_output/")
+
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install(version = "3.18")
+
+# BiocManager::install("Rsubread")
+library(Rsubread) # Use R 4.3.2
+# install.packages("htmltools")
+library(htmltools)
+# BiocManager::install("DESeq2", force = TRUE)
+library(DESeq2) # Use R 4.3.1
+# BiocManager::install("dplyr", force = TRUE)
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+bam.files <- list.files(path = "/home/ktikno/res_project/bam_output/bam_files", full.names = F)
+bam.files <- bam.files[2:11]
+bam.files
+```
+
+```{r}
+props <- propmapped(files = bam.files)
+# files and Rmd need to be in 1 directory otherwise propmapped won't run
+```
+
+```{r}
+qs <- qualityScores(filename = "/home/ktikno/res_project/srr_acc_list/MCF7/SRR12576402.fastq.gz", nreads = 100)
+```
+
+```{r}
+fc <- featureCounts(bam_files, annot.inbuilt = "hg38")
+
+names(fc)
+View(fc$counts)
+View(fc$stat)
+View(fc$annotation)
+fc$targets
+
+colSums(fc$counts)
+
+saveRDS(fc, file = "Feature_Counts.RData")
+```
+
+# Filtering counts
+```{r}
+# hist(countData$SRR12576402)
+countData <- data.frame(fc$counts)
+
+## Cleaning 0 counts
+cpmData <- t(t(countData)/colSums(countData)) * 10^6
+thresh <- cpmData > 0
+head(thresh)
+
+# summary of how many TRUEs there are in each row
+table(rowSums(thresh)) 
+# Keep genes that have at least 2 TRUEs in each row of thresh
+keep <- rowSums(thresh) > 0
+summary(keep)
+plot(cpmData[,1], countData[,1])
+
+# Let us limit the x and y-axis so we can actually look to see what is happening at the smaller counts
+plot(cpmData[,1],countData[,1],ylim=c(0,50),xlim=c(0,3))
+# Add a vertical line at 0.5 CPM
+abline(h=10, v=0.5, col='blue') # 12 counts
+
+# A CPM of 0.5 is used as it corresponds to a count of 10-15 for the library sizes in this data set. If the count is any smaller, it is considered to be very low, indicating that the associated gene is not expressed in that sample. As a general rule, a good threshold can be chosen by identifying the CPM that corresponds to a count of 10. A requirement for expression in two or more libraries is used as each group contains two replicates. This ensures that a gene will be retained if it is only expressed in one group.
+
+# Create new df for counts without 0s
+clean_counts <- countData[keep,]
+
+# Looking for duplicated rownames (gene id)
+clean_counts[!isUnique(rownames(clean_counts)),]
+table(duplicated(rownames(clean_counts)))
+
+saveRDS(clean_counts, file = "Clean_Counts.RData")
+```
+
+# Data Preparation for colData in DESeq2
+```{r}
+full_metadata <- read.table("/home/ktikno/res_project/bam_output/SraRunTable.txt", sep = ',', header = 1)
+
+# Rename the colnames for treatment column, was mispelled
+colnames(full_metadata)[28] <- "treatment"
+
+# Subset certain columns into new df metadata
+metadata <- full_metadata %>% dplyr::select(c("Run", "cell_line", "source_name", "treatment"))
+
+# Make new column 'new_treatment' to differentiate each of the treatment
+metadata$new_treatment <- metadata$treatment
+metadata$new_treatment[7:10] <- paste0(metadata$new_treatment[7:10], '_RB1-KO')
+
+# Make new column 'group' to differentiate Normal vs KO
+metadata$group <- c('Normal','Normal','Normal','Normal','Normal','Normal','KO','KO','KO','KO')
+
+# Make rownames as Sample Names
+rownames(metadata) <- metadata[,1]
+metadata <- metadata[,-1]
+
+saveRDS(metadata, file = 'metadata.RData')
+```
+
+# Data preparation for all counts
+```{r}
+fusion_counts <- readRDS("/home/ktikno/res_project/bam_output/bam_files/rdata/Fusion_Counts.RData")
+
+# Check if there are duplicates and rowsums 0
+fusion_counts[!isUnique(fusion_counts$gene_1n2),]
+fusion_counts <- fusion_counts[rowSums(fusion_counts > 0) > 0,]
+
+# Combining all counts together (single and fusion)
+all_counts <- rbind(clean_counts, fusion_counts)
+all_counts[!isUnique(rownames(all_counts)),]
+rownames(clean_counts)
+rownames(fusion_counts)
+table(duplicated(rownames(clean_counts)))
+table(duplicated(rownames(fusion_counts)))
+table(duplicated(rownames(all_counts)))
+
+saveRDS(all_counts, file = "All_Counts.RData")
+```
+
+# DESeq2 for all_counts
+```{r}
+dds <- DESeqDataSetFromMatrix(countData=all_counts,
+                              colData=metadata,
+                              design=~new_treatment)
+# Design specifies how the counts from each gene depend on our variables in the metadata
+# tidy=TRUE argument, which tells DESeq2 to output the results table with rownames as a first column called 'row
+
+dds$new_treatment <- relevel(dds$new_treatment, ref='DMSO')
+levels(dds$new_treatment)
+
+dds <- DESeq(dds, fitType = 'local')
+saveRDS(dds, file='dds.normal_vs_ko.RData')
+?DESeq
+# estimateSizeFactors
+# calculates the relative library depth of each sample
+# estimateDispersions
+# estimates the dispersion of counts for each gene
+# nbinomWaldTest
+# calculates the significance of coefficients in a neg binomial GLM using the size and dispersion outputs
+
+res <- results(dds)
+# fus_res <- results(fus_dds, alpha = 0.01) #pval < 0.01
+# rownames have all the gene IDs
+# res@metadata$lo.fit$x is theta from res@metadata$filterNumRej
+# res@metadata$lo.fit$y is numRej from res@metadata$filterNumRej
+# View(data.frame(res@listData))
+
+head(res)
+
+# Summary of differential gene expression
+summary(res)
+df.res <- data.frame(res)
+
+# Taking fusion counts only from DESeq2 on all_counts
+df.res.fus <- tail(df.res, n=169)
+df.res.fus <- df.res.fus[order(df.res.fus$padj),]
+saveRDS(df.res.fus, file = 'df.res.fus_abema_dmso.ko.RData')
+
+#contrast, if you have more levels to compare
+resultsNames(dds)
+
+# DMSO vs abema
+res <- results(dds, contrast = c("new_treatment","abemaciclib","DMSO"))
+# or fus_res <- results(fus_dds, name = "new_treatment_abemaciclib_vs_DMSO")
+df.res <- data.frame(res)
+
+# DMSO vs abemaciclib_RB1-KO
+res <- results(dds, contrast = c("new_treatment","abemaciclib_RB1-KO","DMSO"))
+df.res <- data.frame(res)
+
+# Abema vs DMSO_RB1-KO
+res <- results(dds, contrast = c("new_treatment","DMSO_RB1-KO","abemaciclib"))
+df.res <- data.frame(res)
+
+# Abema vs abemaciclib_RB1-KO
+res <- results(dds, contrast = c("new_treatment","abemaciclib_RB1-KO","abemaciclib"))
+df.res <- data.frame(res)
+
+# DMSO_RB1-KO vs abemaciclib_RB1-KO
+res <- results(dds, contrast = c("new_treatment","abemaciclib_RB1-KO","DMSO_RB1-KO"))
+df.res <- data.frame(res)
+```
+
+# Ensembl ID Annotation for Feature Counts
+```{r}
+library(biomaRt)
+
+# Identifying database you need.
+# 1st column gives name we shud provide to the useEnsembl()
+# 2nd column gives a comprehensive title for the dataset+version
+listEnsembl()
+
+# Choosing a dataset
+datasets <- listDatasets(ensembl)
+head(datasets)
+
+# Find any entries matching a specific term or pattern
+searchDatasets(mart = ensembl, pattern = "hsapiens")
+
+# To use a dataset, update Mart object
+ensembl <- useDataset(dataset = "hsapiens_gene_ensembl", mart = ensembl)
+
+# Selecting an Ensembl BioMart database and dataset, Human Genes BioMart - dataset known in advance
+ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version = 111)
+
+# check version
+listEnsemblArchives()
+
+# Build a biomaRt query
+gene_list <- getBM(filters = "entrezgene_id",
+                   attributes = c("entrezgene_id", "hgnc_symbol"),
+                   values = rownames(df.res),
+                   mart = ensembl)
+
+# Removing duplicates in symbol or gene id
+duplicate <- gene_list[!isUnique(gene_list$entrezgene_id),]
+throw <- duplicate[duplicate$hgnc_symbol == "",]
+duplicate <- duplicate[!duplicate$hgnc_symbol == "",]
+duplicate[!isUnique(duplicate$entrezgene_id),]
+throw <- rownames(throw)
+throw <- append(throw, c(32,49,1269,1438,2022,2248,2865,2937,3088,3832,3835,3853,4462,5822,6136,6242,6607,6687,6689,6825,7640,7668,7733,7899,7983,8313,8328,8797,8798,8800,9291,9446,9477,9639,9748,9946,10044,10303,10394,10402,10544,10550,10552,10553,10556,10557,10558,10565,11353,11377,11775,11963,12343,13248,13274,14261,14266,14427,15501,16743,16791,17935,18033,18036,18165,18166,18414,18915,18919,18921,18924,18938,18963,19040,19041,19043,19044,19045,19046,19047,19048,19060,19277,19318,19755,20080,20112,20268,20375,20396,20632,20637,20679,20683,20686,20723,20780,20783,20785,20789,20801,20924,20974,21132,21198,21326,21580,21601,21604,21662,21712,21795,21796,21806,21820,21821,21824,21829,21998))
+gene_list <- gene_list[!(rownames(gene_list) %in% throw),]
+gene_list["20925",]$hgnc_symbol <- "TTTY17C"
+
+gene_list[!isUnique(gene_list$entrezgene_id),] # Checking if there's no more duplicates
+saveRDS(gene_list, file = "gene_list.RData")
+```
+
+# Merging the gene symbols to DESeq2 results
+```{r}
+# rownames(gene_list) <- gene_list$entrezgene_id
+# df.res$hgnc_symbol <- gene_list[rownames(df.res),]$hgnc_symbol
+
+df.res$entrezgene_id <- rownames(df.res)
+df.res <- merge(df.res, gene_list, by="entrezgene_id", all.x = T)
+
+saveRDS(df.res, file = "df.res.abema_dmso.ko.RData")
+```
